@@ -378,10 +378,11 @@ def inferenceWrapper(cls):
                     print("Original sentence: ")
                     print(self.wrap.mentions_to_link[i]["context_left"] + " " + self.wrap.mentions_to_link[i]["mention"] + " " + self.wrap.mentions_to_link[i]["context_right"])
                     print("Entity linked: ", predictions[i][0])
+                    print("Entities identified: ", predictions[i])
                     print("Score: ", scores[i][0])
                     print("\n")
 
-                    if scores[i][0] > 0:
+                    if scores[i][0] > -3.0:
 
                         ent_dict['doc_id'] = self.wrap.mentions_to_link[i]["doc_id"]
                         ent_dict['mention'] = self.wrap.mentions_to_link[i]["mention"]
