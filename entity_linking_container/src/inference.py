@@ -272,8 +272,8 @@ def run(
                     e_url = id2url[e_id]
                     sample_prediction.append(e_title)
                     sample_links.append(e_url)
-                    sample_ids.append(e_id)
-                    sample_scores.append(scores_list[index])
+                    sample_ids.append(int(e_id))
+                    sample_scores.append(float(scores_list[index]))
                 predictions.append(sample_prediction)
                 scores.append(sample_scores)
                 links.append(sample_links)
@@ -334,7 +334,7 @@ def _run_biencoder(biencoder, dataloader, candidate_encoding, top_k=100, indexer
     return labels, nns, all_scores
 
 main_dense.run = run
-main_dense._run_biencoder = _run_biencoder
+# main_dense._run_biencoder = _run_biencoder
 
 def inferenceWrapper(cls):
       
