@@ -91,7 +91,7 @@ async def link(request: Request):
         "label": "unknown",
         "label_id": -1,
         "context_left": json_dict['context_left'].lower() if json_dict['context_left'] is not None else "",
-        "mention": json_dict['mention'].lower()if json_dict['mention'] is not None else "",
+        "mention": json_dict['mention'] if json_dict['mention'] is not None else "",
         "context_right": json_dict['context_right'].lower()if json_dict['context_right'] is not None else ""
     }
     
@@ -133,11 +133,13 @@ async def link(request: Request):
     results = inference.run_inference()
 
     entity_ids = [row['entity_id'] for row in results['entities']]
+    entity_links = [row['entity_link'] for row in results['entities']]
 
     print("Entity IDs length: ", len(entity_ids))
 
     df_linked = df
-    df['entity_id'] = entity_ids
+    df_linked['entity_id'] = entity_ids
+    df_linked['entity_link'] = entity_links
 
     print(df_linked.head())
     print(df_linked.info())
