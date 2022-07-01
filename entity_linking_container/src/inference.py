@@ -350,6 +350,37 @@ def inferenceWrapper(cls):
 
             print("Time to load BLINK models",end - start)
 
+            # load entities
+            self.title2id = {}
+            self.id2title = {}
+            self.id2text = {}
+            self.wikipedia_id2local_id = {}
+            local_idx = 0
+            with open(self.args.entity_catalogue, "r") as fin:
+                lines = fin.readlines()
+                for line in lines:
+                    entity = json.loads(line)
+
+                    if "idx" in entity:
+                        split = entity["idx"].split("curid=")
+                        if len(split) > 1:
+                            wikipedia_id = int(split[-1].strip())
+                        else:
+                            wikipedia_id = entity["idx"].strip()
+
+                        assert wikipedia_id not in self.wikipedia_id2local_id
+                        self.wikipedia_id2local_id[wikipedia_id] = local_idx
+
+                    self.title2id[entity["title"].lower()] = local_idx
+                    self.id2title[local_idx] = entity["title"]
+                    self.id2text[local_idx] = entity["text"]
+                    local_idx += 1
+
+            self.id2url = {
+                v: "https://en.wikipedia.org/wiki?curid=%s" % k
+                for k, v in self.wikipedia_id2local_id.items()
+            }
+
             self.wrap = cls(mentions_to_link)
               
         def run_inference(self):
@@ -357,8 +388,33 @@ def inferenceWrapper(cls):
             start = time.time()
 
             if len(self.wrap.mentions_to_link) >0:
+
+                mentions_to_blink = {
+                    "ids":[],
+                    "mentions":[]
+                }
+                mentions_to_exact_match = {
+                    "ids":[],
+                    "mentions":[]
+                }
+
+                for mention in self.wrap.mentions_to_link:
+                    mention_length = mention["mention"].split(' ')
+                    mention_length = [part for part in mention_length if len(part)>0]
+                    if mention["mention"].lower() in self.title2id.keys() and len(mention_length) > 1:
+                        print("Exact matched: ", mention["mention"])
+                        mentions_to_exact_match["ids"].append(mention["id"])
+                        mention["entity_linked"] = mention["mention"].title()
+                        mention["entity_id"] = self.title2id[mention["mention"].lower()]
+                        mention["entity_link"] = self.id2url[mention["entity_id"]]
+                        mentions_to_exact_match["mentions"].append(mention)
+                    else:
+                        print("To BLINK infer: ", mention["mention"])
+                        mentions_to_blink["ids"].append(mention["id"])
+                        mentions_to_blink["mentions"].append(mention)
+
                 try:
-                    _, _, _, _, _, predictions, links, ids,scores = main_dense.run(self.args, None, *self.models, test_data=self.wrap.mentions_to_link)
+                    _, _, _, _, _, predictions, links, ids,scores = main_dense.run(self.args, None, *self.models, test_data=mentions_to_blink["mentions"])
                     error = False
                 except:
                     print("Error while performing entity linking on mentions list")
@@ -377,29 +433,41 @@ def inferenceWrapper(cls):
                     print("Mention: ",self.wrap.mentions_to_link[i]["mention"])
                     print("Original sentence: ")
                     print(self.wrap.mentions_to_link[i]["context_left"] + " " + self.wrap.mentions_to_link[i]["mention"] + " " + self.wrap.mentions_to_link[i]["context_right"])
-                    print("Entity linked: ", predictions[i][0])
-                    print("Entities identified: ", predictions[i])
-                    print("Score: ", scores[i][0])
-                    print("\n")
 
-                    if scores[i][0] > -3.0:
+                    if self.wrap.mentions_to_link[i]["id"] in mentions_to_blink["ids"]:
+                        index = mentions_to_blink["ids"].index(self.wrap.mentions_to_link[i]["id"])
+                        print("Entity linked: ", predictions[index][0])
+                        print("Entities identified: ", predictions[index])
+                        print("Score: ", scores[index][0])
+                        print("\n")
 
-                        ent_dict['doc_id'] = self.wrap.mentions_to_link[i]["doc_id"]
-                        ent_dict['mention'] = self.wrap.mentions_to_link[i]["mention"]
-                        ent_dict['entity_linked'] = predictions[i][0]
-                        ent_dict['entity_link'] = links[i][0]
-                        ent_dict['entity_id'] = ids[i][0]
-                        ent_dict['entity_confidence_score'] = scores[i][0]
+                        if scores[index][0] > -2.0:
 
+                            ent_dict['doc_id'] = self.wrap.mentions_to_link[i]["doc_id"]
+                            ent_dict['mention'] = self.wrap.mentions_to_link[i]["mention"]
+                            ent_dict['entity_linked'] = predictions[index][0]
+                            ent_dict['entity_link'] = links[index][0]
+                            ent_dict['entity_id'] = ids[index][0]
+                            ent_dict['entity_confidence_score'] = scores[index][0]
+
+                        else:
+                            ent_dict['doc_id'] = self.wrap.mentions_to_link[i]["doc_id"]
+                            ent_dict['mention'] = self.wrap.mentions_to_link[i]["mention"]
+                            ent_dict['entity_linked'] = ""
+                            ent_dict['entity_link'] = ""
+                            ent_dict['entity_id'] = -1
+                            ent_dict['entity_confidence_score'] = 0.0
+                        
+                        ent_list.append(ent_dict)
                     else:
+                        index = mentions_to_exact_match["ids"].index(self.wrap.mentions_to_link[i]["id"])
                         ent_dict['doc_id'] = self.wrap.mentions_to_link[i]["doc_id"]
                         ent_dict['mention'] = self.wrap.mentions_to_link[i]["mention"]
-                        ent_dict['entity_linked'] = ""
-                        ent_dict['entity_link'] = ""
-                        ent_dict['entity_id'] = -1
-                        ent_dict['entity_confidence_score'] = 0.0
-                    
-                    ent_list.append(ent_dict)
+                        ent_dict['entity_linked'] = mentions_to_exact_match["mentions"][index]['entity_linked']
+                        ent_dict['entity_link'] = mentions_to_exact_match["mentions"][index]['entity_link']
+                        ent_dict['entity_id'] = mentions_to_exact_match["mentions"][index]['entity_id']
+                        ent_dict['entity_confidence_score'] = 1.0
+                        ent_list.append(ent_dict)
 
                 entities_dict['entities'] = ent_list
 

@@ -111,6 +111,7 @@ async def link(request: Request):
     df_dict_str = await request.json()
     df_json = json.dumps(df_dict_str)
     df = pd.read_json(df_json, orient="records")
+    df = df.reset_index(drop=True)
     print(df.head())
     print(df.info())
 
